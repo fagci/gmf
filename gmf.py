@@ -2,7 +2,7 @@
 """Global Misconfig Finder"""
 from argparse import ArgumentParser
 from functools import cached_property
-from http.client import HTTPConnection, HTTPException
+from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from ipaddress import IPV4LENGTH, IPv4Address
 from queue import Queue
 from random import randrange
@@ -15,17 +15,25 @@ MAX_IPV4 = 1 << IPV4LENGTH
 
 
 class Checker(Thread):
-    def __init__(self, q: Queue, r: Event, path, exclude, proxy, show_body):
+    __slots__ = ('_q', '_r', '_p', '_port', '_proxy', '_sb', '_ex', '__c')
+
+    def __init__(self, q: Queue, r: Event, path, port, exclude, proxy,
+                 show_body):
         super().__init__(daemon=True)
         self._q = q
         self._r = r
         self._p = path
+        self._port = port
         self._proxy = proxy
         self._sb = show_body
         self._ex = re.compile(exclude, re.I) if exclude else None
 
     def connect(self, ip):
-        self.__c = HTTPConnection(ip)
+        if self._port == 443:
+            from ssl import _create_unverified_context
+            self.__c = HTTPSConnection(ip, context=_create_unverified_context())
+        else:
+            self.__c = HTTPConnection(ip, port=self._port)
 
         if self._proxy:
             ph, pp = self._proxy.split(':')
@@ -53,19 +61,6 @@ class Checker(Thread):
 
         return 100 <= r.status < 300, body
 
-    @staticmethod
-    def is_binary(body: bytes):
-        textchars = bytearray({7, 8, 9, 10, 12, 13, 27}
-                              | set(range(0x20, 0x100)) - {0x7f})
-        return bool(body.translate(None, textchars))
-
-    def print_result(self, ip, body):
-        print(ip)
-        if self._sb:
-            print(body, end='\n_______________\n')
-        if not sys.stdout.isatty():
-            sys.stderr.write(f'{ip}\n')
-
     def run(self):
         while self._r.is_set():
             ip = self._q.get()
@@ -80,15 +75,29 @@ class Checker(Thread):
                 result, body = self.check()
                 if result:
                     self.print_result(ip, body)
+                self.disconnect()
             except OSError as e:
                 if str(e).startswith('Tunnel'):
                     print(e)
                     self._r.clear()
-            except (STimeout, HTTPException):
+            except (STimeout, HTTPException) as e:
                 pass
             except Exception as e:
                 sys.stderr.write(repr(e))
                 sys.stderr.write('\n')
+
+    @staticmethod
+    def is_binary(body: bytes):
+        textchars = bytearray({7, 8, 9, 10, 12, 13, 27}
+                              | set(range(0x20, 0x100)) - {0x7f})
+        return bool(body.translate(None, textchars))
+
+    def print_result(self, ip, body):
+        print(ip)
+        if self._sb:
+            print(body, end='\n_______________\n')
+        if not sys.stdout.isatty():
+            sys.stderr.write(f'{ip}\n')
 
     @staticmethod
     def rand_char():
@@ -115,7 +124,7 @@ class Generator(Thread):
                 self._q.put(str(ip_address))
 
 
-def main(path, workers, timeout, limit, exclude, proxy, show_body):
+def main(path, workers, timeout, limit, exclude, proxy, show_body, port):
     sys.stderr.write('--=[ G M F ]=--\n')
     threads = []
     queue = Queue(workers * 3)
@@ -127,7 +136,7 @@ def main(path, workers, timeout, limit, exclude, proxy, show_body):
         running.set()
 
         for _ in range(workers):
-            t = Checker(queue, running, path, exclude, proxy, show_body)
+            t = Checker(queue, running, path, port, exclude, proxy, show_body)
             threads.append(t)
             t.start()
 
@@ -159,6 +168,7 @@ def main(path, workers, timeout, limit, exclude, proxy, show_body):
 if __name__ == '__main__':
     ap = ArgumentParser()
     ap.add_argument('path', type=str)
+    ap.add_argument('-p', '--port', type=int, default=80)
     ap.add_argument('-w', '--workers', type=int, default=512)
     ap.add_argument('-t', '--timeout', type=float, default=0.75)
     ap.add_argument('-l', '--limit', type=int, default=1000000)
