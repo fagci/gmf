@@ -120,9 +120,9 @@ def main(path, workers, timeout, limit):
 
 if __name__ == '__main__':
     ap = ArgumentParser()
+    ap.add_argument('path', type=str)
     ap.add_argument('-w', '--workers', type=int, default=512)
     ap.add_argument('-t', '--timeout', type=float, default=0.75)
     ap.add_argument('-l', '--limit', type=int, default=1000000)
-    ap.add_argument('-p', '--path', type=str, default='/.git/HEAD')
     a = ap.parse_args()
-    main(a.path, a.workers, a.timeout, a.limit)
+    main(**vars(a))
