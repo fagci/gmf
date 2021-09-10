@@ -46,6 +46,8 @@ class Checker(Thread):
                 break
             if self.check(ip):
                 print(ip)
+                if not sys.stdout.isatty():
+                    sys.stderr.write(f'{ip}\n')
 
     @staticmethod
     def rand_char():
