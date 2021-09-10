@@ -4,12 +4,12 @@ from argparse import ArgumentParser
 from functools import cached_property
 from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from ipaddress import IPV4LENGTH, IPv4Address
-from queue import Queue
 from random import randrange
 import re
 from socket import setdefaulttimeout, timeout as STimeout
 import sys
 from threading import Event, Thread
+from time import sleep
 
 MAX_IPV4 = 1 << IPV4LENGTH
 
@@ -17,21 +17,21 @@ MAX_IPV4 = 1 << IPV4LENGTH
 class Checker(Thread):
     __slots__ = ('_q', '_r', '_p', '_port', '_proxy', '_sb', '_ex', '__c')
 
-    def __init__(self, q: Queue, r: Event, path, port, exclude, proxy,
-                 show_body):
+    def __init__(self, r: Event, limit, path, port, exclude, proxy, show_body):
         super().__init__(daemon=True)
-        self._q = q
         self._r = r
         self._p = path
         self._port = port
         self._proxy = proxy
         self._sb = show_body
         self._ex = re.compile(exclude, re.I) if exclude else None
+        self._gen = self.generator(limit)
 
     def connect(self, ip):
         if self._port == 443:
             from ssl import _create_unverified_context
-            self.__c = HTTPSConnection(ip, context=_create_unverified_context())
+            self.__c = HTTPSConnection(ip,
+                                       context=_create_unverified_context())
         else:
             self.__c = HTTPConnection(ip, port=self._port)
 
@@ -63,7 +63,10 @@ class Checker(Thread):
 
     def run(self):
         while self._r.is_set():
-            ip = self._q.get()
+            try:
+                ip = next(self._gen)
+            except:
+                return
 
             if not ip:
                 break
@@ -108,59 +111,44 @@ class Checker(Thread):
         p = ''.join(self.rand_char() for _ in range(8))
         return f'/{p}'
 
-
-class Generator(Thread):
-    def __init__(self, q: Queue, r: Event, c=1000000):
-        super().__init__(daemon=True)
-        self._q = q
-        self._r = r
-        self._c = c
-
-    def run(self):
-        while self._r.is_set() and self._c:
+    def generator(self, c=1000000):
+        while self._r.is_set() and c:
             ip_address = IPv4Address(randrange(0, MAX_IPV4))
             if ip_address.is_global and not ip_address.is_multicast:
-                self._c -= 1
-                self._q.put(str(ip_address))
+                c -= 1
+                yield str(ip_address)
 
 
 def main(path, workers, timeout, limit, exclude, proxy, show_body, port):
     sys.stderr.write('--=[ G M F ]=--\n')
     threads = []
-    queue = Queue(workers * 3)
     running = Event()
+    running.set()
 
     setdefaulttimeout(timeout)
 
-    try:
-        running.set()
+    for _ in range(workers):
+        t = Checker(running, limit, path, port, exclude, proxy, show_body)
+        threads.append(t)
 
-        for _ in range(workers):
-            t = Checker(queue, running, path, port, exclude, proxy, show_body)
-            threads.append(t)
+    sys.stderr.write('....working....')
+    sys.stderr.write('\n')
+
+
+    try:
+        for t in threads:
             t.start()
-
-        sys.stderr.write('....working....')
-        sys.stderr.write('\n')
-
-        gen = Generator(queue, running, limit)
-        gen.start()
-        gen.join()
-
-        for _ in threads:
-            queue.put(None)
-
-        for t in threads:
-            t.join()
+        while any(t.is_alive() for t in threads):
+            sleep(0.25)
     except KeyboardInterrupt:
-        sys.stderr.write('\rStopping...\n')
         running.clear()
+        sys.stderr.write('\rStopping...\n')
 
     try:
-        for t in threads:
-            t.join()
+        while any(t.is_alive() for t in threads):
+            sleep(0.25)
     except KeyboardInterrupt:
-        sys.stderr.write('\r-----forced-----\n')
+        sys.stderr.write('\r-----force-----\n')
     else:
         sys.stderr.write('----- end -----\n')
 
