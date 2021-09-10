@@ -84,7 +84,7 @@ def pool(queue, running, workers, path):
 def main(path, workers, timeout, limit):
     sys.stderr.write('--=[ G M F ]=--\n')
     setdefaulttimeout(timeout)
-    queue = Queue(workers)
+    queue = Queue(workers*3)
     running = Event()
 
     running.set()
