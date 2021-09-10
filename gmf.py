@@ -27,18 +27,18 @@ class Checker(Thread):
     def check(self, ip):
         try:
             c = HTTPConnection(ip)
-            
+
             if self._proxy:
                 ph, pp = self._proxy.split(':')
                 c.set_tunnel(ph, int(pp))
-            
+
             c.request('GET', self.rand_path)
             r = c.getresponse()
             r.close()
-            
+
             if 100 <= r.status < 300:
                 return False, ''
-            
+
             c.request('GET', self._p)
             r = c.getresponse()
             text = r.read().decode(errors='ignore')
@@ -51,8 +51,7 @@ class Checker(Thread):
             if str(e).startswith('Tunnel'):
                 print(e)
                 self._r.clear()
-        except (STimeout, ConnectionRefusedError, ConnectionRefusedError,
-                HTTPException):
+        except (STimeout, HTTPException):
             pass
         except Exception as e:
             sys.stderr.write(repr(e))
@@ -121,7 +120,7 @@ def main(path, workers, timeout, limit, exclude, proxy, show_body):
         gen.start()
         gen.join()
 
-        for t in threads:
+        for _ in threads:
             queue.put(None)
 
         for t in threads:
