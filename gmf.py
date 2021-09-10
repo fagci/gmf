@@ -22,25 +22,31 @@ class Checker(Thread):
         self._p = path
         self._proxy = proxy
         self._sb = show_body
-        self._ex = re.compile(exclude)
+        self._ex = re.compile(exclude, re.I) if exclude else None
 
     def check(self, ip):
         try:
             c = HTTPConnection(ip)
+            
             if self._proxy:
                 ph, pp = self._proxy.split(':')
                 c.set_tunnel(ph, int(pp))
+            
             c.request('GET', self.rand_path)
             r = c.getresponse()
             r.close()
+            
             if 100 <= r.status < 300:
                 return False, ''
+            
             c.request('GET', self._p)
             r = c.getresponse()
             text = r.read().decode(errors='ignore')
             c.close()
-            ok = 100 <= r.status < 300 and not self._ex.findall(text.lower())
-            return ok, text
+
+            if self._ex and self._ex.findall(text):
+                return False, text
+            return 100 <= r.status < 300, text
         except OSError as e:
             if str(e).startswith('Tunnel'):
                 print(e)
