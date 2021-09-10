@@ -1,6 +1,6 @@
 # Global Misconfig Finder
 
-Searches webserver misconfigs over internet.
+Searches webserver misconfigs over all internet.
 
 ```
 usage: gmf.py [-h] [-w WORKERS] [-t TIMEOUT] [-l LIMIT] [--proxy PROXY] [-b]
