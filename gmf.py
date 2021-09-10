@@ -4,6 +4,7 @@ from argparse import ArgumentParser
 from functools import cached_property
 from http.client import HTTPConnection, HTTPException
 from ipaddress import IPV4LENGTH, IPv4Address
+from mimetypes import guess_type
 from queue import Queue
 from random import randrange
 import re
@@ -44,12 +45,19 @@ class Checker(Thread):
     def check(self):
         self.__c.request('GET', self._p)
         r = self.__c.getresponse()
-        text = r.read().decode(errors='ignore')
+        data = r.read()
+        text = data.decode(errors='ignore')
+        body = '<binary file>' if self.is_binary(data) else text
 
         if self._ex and self._ex.findall(text):
-            return False, text
+            return False, body
 
-        return 100 <= r.status < 300, text
+        return 100 <= r.status < 300, body
+
+    @staticmethod
+    def is_binary(body:bytes):
+        textchars = bytearray({7,8,9,10,12,13,27} | set(range(0x20, 0x100)) - {0x7f})
+        return bool(body.translate(None, textchars))
 
     def print_result(self, ip, body):
         print(ip)
