@@ -6,6 +6,7 @@ from http.client import HTTPConnection
 from ipaddress import IPV4LENGTH, IPv4Address
 from queue import Queue
 from random import randrange
+import re
 from socket import setdefaulttimeout
 import sys
 from threading import Event, Thread
@@ -14,13 +15,12 @@ MAX_IPV4 = 1 << IPV4LENGTH
 
 
 class Checker(Thread):
-    _BL = ('<br', '<!doc', '<html', '<body')
-
-    def __init__(self, q: Queue, r: Event, p: str):
+    def __init__(self, q: Queue, r: Event, p: str, exclude: str):
         super().__init__(daemon=True)
         self._q = q
         self._r = r
         self._p = p
+        self._ex = re.compile(exclude)
 
     def check(self, ip):
         try:
@@ -34,8 +34,7 @@ class Checker(Thread):
             r = c.getresponse()
             text = r.read().decode(errors='ignore').lower()
             c.close()
-            return 100 <= r.status < 300 and all(t not in text
-                                                 for t in self._BL)
+            return 100 <= r.status < 300 and not self._ex.match(text)
         except:
             return False
 
@@ -74,26 +73,22 @@ class Generator(Thread):
                 self._q.put(str(ip_address))
 
 
-def pool(queue, running, workers, path):
-    threads = []
-    for _ in range(workers):
-        t = Checker(queue, running, path)
-        threads.append(t)
-        t.start()
-    return threads
-
-
-def main(path, workers, timeout, limit):
+def main(path, workers, timeout, limit, exclude):
     sys.stderr.write('--=[ G M F ]=--\n')
-    setdefaulttimeout(timeout)
-    queue = Queue(workers*3)
+    threads = []
+    queue = Queue(workers * 3)
     running = Event()
+
+    setdefaulttimeout(timeout)
 
     try:
         running.set()
-        threads = pool(queue, running, workers, path)
+        for _ in range(workers):
+            t = Checker(queue, running, path, exclude)
+            threads.append(t)
+            t.start()
 
-        sys.stderr.write('~' * 15)
+        sys.stderr.write('....working....')
         sys.stderr.write('\n')
 
         gen = Generator(queue, running, limit)
@@ -124,5 +119,8 @@ if __name__ == '__main__':
     ap.add_argument('-w', '--workers', type=int, default=512)
     ap.add_argument('-t', '--timeout', type=float, default=0.75)
     ap.add_argument('-l', '--limit', type=int, default=1000000)
-    a = ap.parse_args()
-    main(**vars(a))
+    ap.add_argument('-x',
+                    '--exclude',
+                    type=str,
+                    default='<(!doctype|html|head|body|br)')
+    main(**vars(ap.parse_args()))
