@@ -1,7 +1,9 @@
 # Global Misconfig Finder
 
 ```
-usage: gmf.py [-h] [-w WORKERS] [-t TIMEOUT] [-l LIMIT] path
+usage: gmf.py [-h] [-w WORKERS] [-t TIMEOUT] [-l LIMIT] [--proxy PROXY] [-b]
+              [-x EXCLUDE]
+              path
 
 positional arguments:
   path
@@ -11,6 +13,9 @@ optional arguments:
   -w WORKERS, --workers WORKERS
   -t TIMEOUT, --timeout TIMEOUT
   -l LIMIT, --limit LIMIT
+  --proxy PROXY
+  -b, --show-body
+  -x EXCLUDE, --exclude EXCLUDE
 ```
 
 _Only for educational purposes_
