@@ -24,53 +24,63 @@ class Checker(Thread):
         self._sb = show_body
         self._ex = re.compile(exclude, re.I) if exclude else None
 
-    def check(self, ip):
-        try:
-            c = HTTPConnection(ip)
+    def connect(self, ip):
+        self.__c = HTTPConnection(ip)
 
-            if self._proxy:
-                ph, pp = self._proxy.split(':')
-                c.set_tunnel(ph, int(pp))
+        if self._proxy:
+            ph, pp = self._proxy.split(':')
+            self.__c.set_tunnel(ph, int(pp))
 
-            c.request('GET', self.rand_path)
-            r = c.getresponse()
-            r.close()
+    def disconnect(self):
+        self.__c.close()
 
-            if 100 <= r.status < 300:
-                return False, ''
+    def pre_check(self):
+        self.__c.request('GET', self.rand_path)
+        r = self.__c.getresponse()
+        r.close()
 
-            c.request('GET', self._p)
-            r = c.getresponse()
-            text = r.read().decode(errors='ignore')
-            c.close()
+        return not 100 <= r.status < 300
 
-            if self._ex and self._ex.findall(text):
-                return False, text
-            return 100 <= r.status < 300, text
-        except OSError as e:
-            if str(e).startswith('Tunnel'):
-                print(e)
-                self._r.clear()
-        except (STimeout, HTTPException):
-            pass
-        except Exception as e:
-            sys.stderr.write(repr(e))
-            sys.stderr.write('\n')
+    def check(self):
+        self.__c.request('GET', self._p)
+        r = self.__c.getresponse()
+        text = r.read().decode(errors='ignore')
 
-        return False, ''
+        if self._ex and self._ex.findall(text):
+            return False, text
+
+        return 100 <= r.status < 300, text
+
+    def print_result(self, ip, body):
+        print(ip)
+        if self._sb:
+            print(body, end='\n_______________\n')
+        if not sys.stdout.isatty():
+            sys.stderr.write(f'{ip}\n')
 
     def run(self):
         while self._r.is_set():
             ip = self._q.get()
+
             if not ip:
                 break
-            result, body = self.check(ip)
-            if result:
-                print(ip)
-                if self._sb:
-                    print(body, end='\n_______________\n')
-                if not sys.stdout.isatty():
-                    sys.stderr.write(f'{ip}\n')
+
+            try:
+                self.connect(ip)
+                if not self.pre_check():
+                    continue
+                result, body = self.check()
+                if result:
+                    self.print_result(ip, body)
+            except OSError as e:
+                if str(e).startswith('Tunnel'):
+                    print(e)
+                    self._r.clear()
+            except (STimeout, HTTPException):
+                pass
+            except Exception as e:
+                sys.stderr.write(repr(e))
+                sys.stderr.write('\n')
 
     @staticmethod
     def rand_char():
