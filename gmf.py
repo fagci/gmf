@@ -2,7 +2,7 @@
 """Global Misconfig Finder"""
 from argparse import ArgumentParser
 from functools import cached_property
-from http.client import BadStatusLine, HTTPConnection
+from http.client import HTTPConnection, HTTPException
 from ipaddress import IPV4LENGTH, IPv4Address
 from queue import Queue
 from random import randrange
@@ -46,10 +46,11 @@ class Checker(Thread):
                 print(e)
                 self._r.clear()
         except (STimeout, ConnectionRefusedError, ConnectionRefusedError,
-                BadStatusLine):
+                HTTPException):
             pass
         except Exception as e:
-            print(repr(e))
+            sys.stderr.write(repr(e))
+            sys.stderr.write('\n')
 
         return False, ''
 
@@ -139,7 +140,7 @@ if __name__ == '__main__':
     ap.add_argument('-t', '--timeout', type=float, default=0.75)
     ap.add_argument('-l', '--limit', type=int, default=1000000)
     ap.add_argument('--proxy', type=str, default='')
-    ap.add_argument('-b','--show-body', default=False, action='store_true')
+    ap.add_argument('-b', '--show-body', default=False, action='store_true')
     ap.add_argument('-x',
                     '--exclude',
                     type=str,
