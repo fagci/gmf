@@ -89,13 +89,13 @@ def main(path, workers, timeout, limit):
     queue = Queue(workers*3)
     running = Event()
 
-    running.set()
-    threads = pool(queue, running, workers, path)
-
-    sys.stderr.write('~' * 15)
-    sys.stderr.write('\n')
-
     try:
+        running.set()
+        threads = pool(queue, running, workers, path)
+
+        sys.stderr.write('~' * 15)
+        sys.stderr.write('\n')
+
         gen = Generator(queue, running, limit)
         gen.start()
         gen.join()
