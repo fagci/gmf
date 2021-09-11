@@ -9,7 +9,6 @@ import re
 from socket import setdefaulttimeout, timeout as STimeout
 import sys
 from threading import Event, Thread
-from time import sleep
 
 MAX_IPV4 = 1 << IPV4LENGTH
 
@@ -17,21 +16,21 @@ MAX_IPV4 = 1 << IPV4LENGTH
 class Checker(Thread):
     __slots__ = ('_q', '_r', '_p', '_port', '_proxy', '_sb', '_ex', '__c')
 
-    def __init__(self, r: Event, limit, path, port, exclude, proxy, show_body):
-        super().__init__(daemon=True)
+    def __init__(self, r: Event, generator, path, port, exclude, proxy,
+                 show_body):
+        super().__init__()
         self._r = r
         self._p = path
         self._port = port
         self._proxy = proxy
         self._sb = show_body
         self._ex = re.compile(exclude, re.I) if exclude else None
-        self._gen = self.generator(limit)
+        self._gen = generator
 
     def connect(self, ip):
         if self._port == 443:
-            from ssl import _create_unverified_context
-            self.__c = HTTPSConnection(ip,
-                                       context=_create_unverified_context())
+            from ssl import _create_unverified_context as cuc
+            self.__c = HTTPSConnection(ip, context=cuc())
         else:
             self.__c = HTTPConnection(ip, port=self._port)
 
@@ -89,18 +88,18 @@ class Checker(Thread):
                 sys.stderr.write(repr(e))
                 sys.stderr.write('\n')
 
-    @staticmethod
-    def is_binary(body: bytes):
-        textchars = bytearray({7, 8, 9, 10, 12, 13, 27}
-                              | set(range(0x20, 0x100)) - {0x7f})
-        return bool(body.translate(None, textchars))
-
     def print_result(self, ip, body):
         print(ip)
         if self._sb:
             print(body, end='\n_______________\n')
         if not sys.stdout.isatty():
             sys.stderr.write(f'{ip}\n')
+
+    @staticmethod
+    def is_binary(body: bytes):
+        textchars = bytearray({7, 8, 9, 10, 12, 13, 27}
+                              | set(range(0x20, 0x100)) - {0x7f})
+        return bool(body.translate(None, textchars))
 
     @staticmethod
     def rand_char():
@@ -111,12 +110,13 @@ class Checker(Thread):
         p = ''.join(self.rand_char() for _ in range(8))
         return f'/{p}'
 
-    def generator(self, c=1000000):
-        while self._r.is_set() and c:
-            ip_address = IPv4Address(randrange(0, MAX_IPV4))
-            if ip_address.is_global and not ip_address.is_multicast:
-                c -= 1
-                yield str(ip_address)
+
+def ip_generator(count):
+    while count:
+        ip_address = IPv4Address(randrange(0, MAX_IPV4))
+        if ip_address.is_global and not ip_address.is_multicast:
+            count -= 1
+            yield str(ip_address)
 
 
 def main(path, workers, timeout, limit, exclude, proxy, show_body, port):
@@ -127,26 +127,28 @@ def main(path, workers, timeout, limit, exclude, proxy, show_body, port):
 
     setdefaulttimeout(timeout)
 
+    generator = ip_generator(limit)
+
     for _ in range(workers):
-        t = Checker(running, limit, path, port, exclude, proxy, show_body)
+        t = Checker(running, generator, path, port, exclude, proxy, show_body)
         threads.append(t)
 
     sys.stderr.write('....working....')
     sys.stderr.write('\n')
 
-
     try:
         for t in threads:
             t.start()
-        while any(t.is_alive() for t in threads):
-            sleep(0.25)
+        for t in threads:
+            t.join()
+        print('threads end?')
     except KeyboardInterrupt:
         running.clear()
         sys.stderr.write('\rStopping...\n')
 
     try:
-        while any(t.is_alive() for t in threads):
-            sleep(0.25)
+        for t in threads:
+            t.join()
     except KeyboardInterrupt:
         sys.stderr.write('\r-----force-----\n')
     else:
