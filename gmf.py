@@ -62,10 +62,7 @@ class Checker(Thread):
         while self._r.is_set():
             try:
                 ip = next(self._gen)
-            except:
-                return
-
-            if not ip:
+            except StopIteration:
                 break
 
             try:
