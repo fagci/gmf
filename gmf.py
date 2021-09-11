@@ -42,7 +42,7 @@ class Checker(Thread):
     def pre_check(self):
         self.__c.request('GET', self.rand_path)
         r = self.__c.getresponse()
-        r.close()
+        r.read()
 
         return not 100 <= r.status < 300
 
