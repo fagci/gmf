@@ -80,7 +80,7 @@ class Checker(Thread):
                 self.disconnect()
             except OSError as e:
                 if str(e).startswith('Tunnel'):
-                    print(e)
+                    sys.stderr.write(f'{e}\n')
                     self._r.clear()
             except (STimeout, HTTPException) as e:
                 pass
@@ -141,7 +141,6 @@ def main(path, workers, timeout, limit, exclude, proxy, show_body, port):
             t.start()
         for t in threads:
             t.join()
-        print('threads end?')
     except KeyboardInterrupt:
         running.clear()
         sys.stderr.write('\rStopping...\n')
