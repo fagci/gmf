@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Global Misconfig Finder"""
 from argparse import ArgumentParser
+from base64 import b64encode
 from functools import cached_property
 from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from random import randint, randrange
@@ -13,10 +14,11 @@ from threading import Event, Lock, Thread
 
 class Checker(Thread):
     __gl = Lock()
-    __slots__ = ('_q', '_r', '_p', '_port', '_proxy', '_sb', '_ex', '__c', '_gen')
+    __slots__ = ('_q', '_r', '_p', '_port', '_proxy', '_sb', '_ex', '__c',
+                 '_gen', '_creds', '_h')
 
     def __init__(self, r: Event, generator, path, port, exclude, proxy,
-                 show_body):
+                 show_body, creds):
         super().__init__()
         self._r = r
         self._p = path
@@ -25,6 +27,8 @@ class Checker(Thread):
         self._sb = show_body
         self._ex = re.compile(exclude, re.I) if exclude else None
         self._gen = generator
+        self._creds = creds
+        self._h = {'User-Agent': 'Mozilla/5.0'}
 
     def connect(self, ip):
         if self._port == 443:
@@ -41,14 +45,19 @@ class Checker(Thread):
         self.__c.close()
 
     def pre_check(self):
-        self.__c.request('GET', self.rand_path)
+
+        self.__c.request('GET', self.rand_path, headers=self._h)
         r = self.__c.getresponse()
         r.read()
 
         return not 100 <= r.status < 300
 
     def check(self):
-        self.__c.request('GET', self._p)
+        headers = self._h
+        if self._creds:
+            userAndPass = b64encode(self._creds.encode()).decode("ascii")
+            headers['Authorization'] = 'Basic %s' % userAndPass
+        self.__c.request('GET', self._p, headers=headers)
         r = self.__c.getresponse()
         data = r.read()
         text = data.decode(errors='ignore')
@@ -129,7 +138,8 @@ def global_ip_generator(count):
         yield inet_ntoa(pack('>I', intip))
 
 
-def main(path, workers, timeout, limit, exclude, proxy, show_body, port):
+def main(path, workers, timeout, limit, exclude, proxy, show_body, port,
+         creds):
     sys.stderr.write('--=[ G M F ]=--\n')
     threads = []
     running = Event()
@@ -140,7 +150,8 @@ def main(path, workers, timeout, limit, exclude, proxy, show_body, port):
     generator = global_ip_generator(limit)
 
     for _ in range(workers):
-        t = Checker(running, generator, path, port, exclude, proxy, show_body)
+        t = Checker(running, generator, path, port, exclude, proxy, show_body,
+                    creds)
         threads.append(t)
 
     sys.stderr.write('....working....')
@@ -171,6 +182,7 @@ if __name__ == '__main__':
     ap.add_argument('-w', '--workers', type=int, default=512)
     ap.add_argument('-t', '--timeout', type=float, default=0.75)
     ap.add_argument('-l', '--limit', type=int, default=1000000)
+    ap.add_argument('-c', '--creds', type=str, default='')
     ap.add_argument('--proxy', type=str, default='')
     ap.add_argument('-b', '--show-body', default=False, action='store_true')
     ap.add_argument('-x',
