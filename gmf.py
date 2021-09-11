@@ -97,9 +97,8 @@ class Checker(Thread):
 
     @staticmethod
     def is_binary(body: bytes):
-        textchars = bytearray({7, 8, 9, 10, 12, 13, 27}
-                              | set(range(0x20, 0x100)) - {0x7f})
-        return bool(body.translate(None, textchars))
+        tc = set(range(7,14)) | {27} | set(range(0x20, 0x100)) - {0x7f}
+        return bool(body.translate(None, bytearray(tc)))
 
     @staticmethod
     def rand_char():
