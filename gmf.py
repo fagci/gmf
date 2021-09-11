@@ -100,6 +100,7 @@ class Checker(Thread):
             print(body, end='\n_______________\n')
         if not sys.stdout.isatty():
             sys.stderr.write(f'{ip}\n')
+            sys.stderr.flush()
 
     @staticmethod
     def is_binary(body: bytes):

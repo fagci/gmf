@@ -20,4 +20,13 @@ optional arguments:
   -x EXCLUDE, --exclude EXCLUDE
 ```
 
+# Examples
+
+```sh
+xport PYTHONUNBUFFERED=1
+./gmf.py /favicon.ico \
+  | parallel -uj1 wget http://{}/favicon.ico \
+    -O  ~/storage/pictures/fav/{}.ico
+```
+
 _Only for educational purposes_
