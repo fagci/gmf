@@ -8,11 +8,12 @@ import re
 from socket import inet_ntoa, setdefaulttimeout, timeout as STimeout
 from struct import pack
 import sys
-from threading import Event, Thread
+from threading import Event, Lock, Thread
 
 
 class Checker(Thread):
-    __slots__ = ('_q', '_r', '_p', '_port', '_proxy', '_sb', '_ex', '__c')
+    __gl = Lock()
+    __slots__ = ('_q', '_r', '_p', '_port', '_proxy', '_sb', '_ex', '__c', '_gen')
 
     def __init__(self, r: Event, generator, path, port, exclude, proxy,
                  show_body):
@@ -61,7 +62,8 @@ class Checker(Thread):
     def run(self):
         while self._r.is_set():
             try:
-                ip = next(self._gen)
+                with self.__gl:
+                    ip = next(self._gen)
             except StopIteration:
                 break
 
