@@ -3,14 +3,12 @@
 from argparse import ArgumentParser
 from functools import cached_property
 from http.client import HTTPConnection, HTTPException, HTTPSConnection
-from ipaddress import IPV4LENGTH, IPv4Address
-from random import randrange
+from random import randint, randrange
 import re
-from socket import setdefaulttimeout, timeout as STimeout
+from socket import inet_ntoa, setdefaulttimeout, timeout as STimeout
+from struct import pack
 import sys
 from threading import Event, Thread
-
-MAX_IPV4 = 1 << IPV4LENGTH
 
 
 class Checker(Thread):
@@ -97,7 +95,7 @@ class Checker(Thread):
 
     @staticmethod
     def is_binary(body: bytes):
-        tc = set(range(7,14)) | {27} | set(range(0x20, 0x100)) - {0x7f}
+        tc = set(range(7, 14)) | {27} | set(range(0x20, 0x100)) - {0x7f}
         return bool(body.translate(None, bytearray(tc)))
 
     @staticmethod
@@ -110,12 +108,26 @@ class Checker(Thread):
         return f'/{p}'
 
 
-def ip_generator(count):
+def global_ip_generator(count):
+    # https://gist.github.com/fagci/74045f280991312592068a34c8a13224
     while count:
-        ip_address = IPv4Address(randrange(0, MAX_IPV4))
-        if ip_address.is_global and not ip_address.is_multicast:
-            count -= 1
-            yield str(ip_address)
+        intip = randint(0x1000000, 0xE0000000)
+        if (0xa000000 <= intip <= 0xaffffff
+                or 0x64400000 <= intip <= 0x647fffff
+                or 0x7f000000 <= intip <= 0x7fffffff
+                or 0xa9fe0000 <= intip <= 0xa9feffff
+                or 0xac100000 <= intip <= 0xac1fffff
+                or 0xc0000000 <= intip <= 0xc0000007
+                or 0xc00000aa <= intip <= 0xc00000ab
+                or 0xc0000200 <= intip <= 0xc00002ff
+                or 0xc0a80000 <= intip <= 0xc0a8ffff
+                or 0xc6120000 <= intip <= 0xc613ffff
+                or 0xc6336400 <= intip <= 0xc63364ff
+                or 0xcb007100 <= intip <= 0xcb0071ff
+                or 0xf0000000 <= intip <= 0xffffffff):
+            continue
+        count -= 1
+        yield inet_ntoa(pack('>I', intip))
 
 
 def main(path, workers, timeout, limit, exclude, proxy, show_body, port):
@@ -126,7 +138,7 @@ def main(path, workers, timeout, limit, exclude, proxy, show_body, port):
 
     setdefaulttimeout(timeout)
 
-    generator = ip_generator(limit)
+    generator = global_ip_generator(limit)
 
     for _ in range(workers):
         t = Checker(running, generator, path, port, exclude, proxy, show_body)
