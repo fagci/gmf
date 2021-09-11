@@ -23,7 +23,7 @@ optional arguments:
 # Examples
 
 ```sh
-xport PYTHONUNBUFFERED=1
+export PYTHONUNBUFFERED=1
 ./gmf.py /favicon.ico \
   | parallel -uj1 wget http://{}/favicon.ico \
     -O  ~/storage/pictures/fav/{}.ico
