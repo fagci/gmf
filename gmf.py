@@ -14,7 +14,7 @@ from threading import Event, Lock, Thread
 
 class Checker(Thread):
     __gl = Lock()
-    __slots__ = ('_q', '_r', '_p', '_port', '_proxy', '_sb', '_ex', '__c',
+    __slots__ = ('_q', '_r', '_p', '_port', '_proxy', '_sb', '_ex', '_c',
                  '_gen', '_creds', '_h')
 
     def __init__(self, r: Event, generator, path, port, exclude, proxy,
@@ -33,21 +33,21 @@ class Checker(Thread):
     def connect(self, ip):
         if self._port == 443:
             from ssl import _create_unverified_context as cuc
-            self.__c = HTTPSConnection(ip, context=cuc())
+            self._c = HTTPSConnection(ip, context=cuc())
         else:
-            self.__c = HTTPConnection(ip, port=self._port)
+            self._c = HTTPConnection(ip, port=self._port)
 
         if self._proxy:
             ph, pp = self._proxy.split(':')
-            self.__c.set_tunnel(ph, int(pp))
+            self._c.set_tunnel(ph, int(pp))
 
     def disconnect(self):
-        self.__c.close()
+        self._c.close()
 
     def pre_check(self):
 
-        self.__c.request('GET', self.rand_path, headers=self._h)
-        r = self.__c.getresponse()
+        self._c.request('GET', self.rand_path, headers=self._h)
+        r = self._c.getresponse()
         r.read()
 
         return not 100 <= r.status < 300
@@ -57,8 +57,8 @@ class Checker(Thread):
         if self._creds:
             userAndPass = b64encode(self._creds.encode()).decode("ascii")
             headers['Authorization'] = 'Basic %s' % userAndPass
-        self.__c.request('GET', self._p, headers=headers)
-        r = self.__c.getresponse()
+        self._c.request('GET', self._p, headers=headers)
+        r = self._c.getresponse()
         data = r.read()
         text = data.decode(errors='ignore')
         body = '<binary file>' if self.is_binary(data) else text
