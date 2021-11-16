@@ -13,7 +13,7 @@ from threading import Event, Lock, Thread
 
 
 class Checker(Thread):
-    __gl = Lock()
+    _gl = Lock()
     __slots__ = ('_q', '_r', '_p', '_port', '_proxy', '_sb', '_ex', '_c',
                  '_gen', '_creds', '_h')
 
@@ -71,7 +71,7 @@ class Checker(Thread):
     def run(self):
         while self._r.is_set():
             try:
-                with self.__gl:
+                with self._gl:
                     ip = next(self._gen)
             except StopIteration:
                 break
